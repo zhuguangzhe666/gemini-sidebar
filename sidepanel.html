@@ -133,7 +133,7 @@
       color: #333;
     }
     
-    /* 6. 聊天记录区域 (不变) */
+    /* 6. 聊天记录区域 */
     #chat-container {
       flex-grow: 1;
       overflow-y: auto;
@@ -151,7 +151,21 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.5);
       border: 1px solid transparent;
       transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+      animation: slideIn 0.3s ease-out;
     }
+    
+    /* (NEW) 消息滑入动画 */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
     .user-message {
       background-color: var(--bubble-user-bg);
       color: var(--bubble-user-text);
@@ -170,6 +184,51 @@
       border-color: #ff4d4d;
     }
 
+    /* (NEW) 打字机加载动画 */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 0;
+    }
+    
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      animation: typing 1.4s infinite;
+      box-shadow: 0 0 5px var(--primary-color);
+    }
+    
+    .typing-indicator span:nth-child(1) {
+      animation-delay: 0s;
+    }
+    
+    .typing-indicator span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+      0%, 60%, 100% {
+        transform: scale(1);
+        opacity: 0.7;
+      }
+      30% {
+        transform: scale(1.4);
+        opacity: 1;
+      }
+    }
+    
+    body.light-theme .typing-indicator span {
+      background-color: var(--primary-color);
+      box-shadow: 0 0 3px var(--primary-color);
+    }
+
     /* 7. 底部输入区域 (粘性) */
     #input-footer {
       flex-shrink: 0;
@@ -182,9 +241,9 @@
       align-items: stretch;
     }
 
-    /* (MODIFIED) 划词引用容器 */
+    /* 划词引用容器 */
     #quoted-section {
-      display: none; /* 默认隐藏 */
+      display: none;
       margin-bottom: 10px;
       padding: 8px 12px;
       background-color: rgba(0, 255, 255, 0.1);
@@ -192,7 +251,7 @@
       border-radius: 5px;
       font-size: 0.9em;
       color: var(--text-color);
-      position: relative; /* (NEW) 用于定位清除按钮 */
+      position: relative;
       word-wrap: break-word;
       white-space: pre-wrap;
       max-height: 80px;
@@ -204,12 +263,10 @@
       border: 1px solid #cce5ff;
     }
 
-    /* (NEW) 引用内容，为清除按钮留空间 */
     #quoted-section-content {
       padding-right: 25px; 
     }
 
-    /* (NEW) 清除引用按钮样式 */
     #clear-quote {
       position: absolute;
       top: 5px;
@@ -225,7 +282,7 @@
       transition: color 0.3s;
     }
     #clear-quote:hover {
-      color: #ff4d4d; /* 悬停时变红 */
+      color: #ff4d4d;
     }
     
     #prompt-input {
@@ -247,7 +304,7 @@
       border: var(--border-primary);
     }
     
-    /* 8. 按钮通用样式 (不变) */
+    /* 8. 按钮通用样式 */
     button {
       width: 100%;
       padding: 10px;
@@ -273,7 +330,42 @@
       cursor: not-allowed;
     }
 
-    /* 9. Markdown 渲染样式 (不变) */
+    /* (NEW) 代码块复制按钮样式 */
+    .copy-button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 5px 10px;
+      font-size: 0.85em;
+      background: rgba(0, 255, 255, 0.2);
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: auto;
+      text-shadow: none;
+      z-index: 10;
+    }
+    
+    .copy-button:hover {
+      background: var(--primary-color);
+      color: #000;
+      box-shadow: 0 0 8px var(--primary-color);
+    }
+    
+    body.light-theme .copy-button {
+      background: rgba(0, 123, 255, 0.1);
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+    }
+    
+    body.light-theme .copy-button:hover {
+      background: var(--primary-color);
+      color: #fff;
+    }
+
+    /* 9. Markdown 渲染样式 */
     .bot-message h1, .bot-message h2, .bot-message h3, .bot-message h4 {
       color: var(--primary-color);
       text-shadow: 0 0 3px var(--primary-color);
@@ -311,12 +403,14 @@
     .bot-message pre {
       background: #000;
       padding: 10px;
+      padding-top: 35px; /* (MODIFIED) 为复制按钮留出空间 */
       border-radius: 5px;
       border: var(--border-primary);
       overflow-x: auto;
       margin-top: 1em;
       margin-bottom: 1em;
       transition: background-color 0.3s, border-color 0.3s;
+      position: relative; /* (NEW) 为复制按钮定位 */
     }
     body.light-theme .bot-message pre {
       background: #fdfdfd;
@@ -352,7 +446,8 @@
     <div id="header">
       <h3>我的 Gemini 助手</h3>
       <div id="header-icons">
-        <div id="theme-toggle" title="切换主题">🌙</div> <div id="settings-toggle" title="设置 API 密钥">⚙️</div>
+        <div id="theme-toggle" title="切换主题">🌙</div>
+        <div id="settings-toggle" title="设置 API 密钥">⚙️</div>
       </div>
     </div>
     
@@ -372,11 +467,13 @@
     </div>
     
     <div id="chat-container">
-      </div>
+    </div>
     
     <div id="input-footer">
       <div id="quoted-section">
-        <div id="quoted-section-content"></div> <button id="clear-quote" title="清除引用">✖️</button> </div>
+        <div id="quoted-section-content"></div>
+        <button id="clear-quote" title="清除引用">✖️</button>
+      </div>
       <textarea id="prompt-input" placeholder="输入消息... (Shift+Enter 换行)"></textarea>
     </div>
     
