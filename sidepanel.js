@@ -12,12 +12,14 @@ const modelSelect = document.getElementById('model-select');
 const chatContainer = document.getElementById('chat-container');
 const promptInput = document.getElementById('prompt-input');
 
-// (MODIFIED) 引用相关元素
+// 引用相关元素
 const quotedSection = document.getElementById('quoted-section');
-const quotedSectionContent = document.getElementById('quoted-section-content'); // (NEW) 引用内容显示区域
-const clearQuoteButton = document.getElementById('clear-quote');           // (NEW) 清除引用按钮
+const quotedSectionContent = document.getElementById('quoted-section-content');
+const clearQuoteButton = document.getElementById('clear-quote');
 
 let currentQuotedText = ''; 
+let currentStreamBubble = null; // (NEW) 当前流式响应的气泡
+let currentStreamText = ''; // (NEW) 当前流式累积的文本
 
 
 // --- 2. 设置区域逻辑 ---
@@ -71,7 +73,7 @@ themeToggle.addEventListener('click', () => {
   }
 });
 
-// (NEW) 清除引用按钮的事件监听器
+// 清除引用按钮的事件监听器
 clearQuoteButton.addEventListener('click', () => {
   clearQuotedText();
 });
@@ -114,6 +116,23 @@ document.addEventListener('DOMContentLoaded', () => {
       promptInput.focus();
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
+    
+    // (NEW) 处理流式响应消息
+    if (message.type === 'STREAM_START') {
+      handleStreamStart();
+    }
+    
+    if (message.type === 'STREAM_CHUNK') {
+      handleStreamChunk(message.text);
+    }
+    
+    if (message.type === 'STREAM_END') {
+      handleStreamEnd();
+    }
+    
+    if (message.type === 'STREAM_ERROR') {
+      handleStreamError(message.error);
+    }
   });
 });
 
@@ -128,7 +147,7 @@ promptInput.addEventListener('keydown', (e) => {
   }
 });
 
-// (MODIFIED) 发送消息的处理函数
+// (MODIFIED) 发送消息的处理函数 - 使用流式 API
 async function handleSend() {
   const userQuestion = promptInput.value.trim();
   const quotedText = currentQuotedText; 
@@ -159,7 +178,6 @@ async function handleSend() {
   // --- B. 更新聊天界面 (UI) ---
   if (quotedText) {
     addMessageToChat('user', `引用了："${quotedText}"`);
-    // (REMOVED) 这里不再自动清除引用
   }
   if (userQuestion) {
     addMessageToChat('user', userQuestion);
@@ -168,22 +186,68 @@ async function handleSend() {
   }
 
   promptInput.value = ''; 
-  const thinkingBubble = addMessageToChat('bot', '... 思考中 ...');
 
-  // --- C. 调用 API ---
+  // --- C. 调用流式 API ---
   try {
-    const responseText = await chrome.runtime.sendMessage({
-      type: 'callGemini',
+    chrome.runtime.sendMessage({
+      type: 'callGeminiStream',
       prompt: fullPrompt, 
       apiKey: apiKey,
       model: selectedModel 
     });
-    
-    thinkingBubble.innerHTML = marked.parse(responseText); 
-
   } catch (error) {
-    thinkingBubble.innerText = `发生错误: ${error.message}`;
-    thinkingBubble.classList.add('error');
+    addMessageToChat('bot', `发生错误: ${error.message}`, 'error');
+  }
+}
+
+// (NEW) 处理流式响应开始
+function handleStreamStart() {
+  // 创建一个新的加载气泡
+  currentStreamBubble = document.createElement('div');
+  currentStreamBubble.className = 'chat-bubble bot-message';
+  currentStreamBubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  chatContainer.appendChild(currentStreamBubble);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+  currentStreamText = '';
+}
+
+// (NEW) 处理流式响应片段
+function handleStreamChunk(text) {
+  if (!currentStreamBubble) return;
+  
+  currentStreamText += text;
+  
+  // 渲染 Markdown
+  currentStreamBubble.innerHTML = marked.parse(currentStreamText);
+  
+  // 为代码块添加复制按钮
+  addCopyButtonsToCodeBlocks(currentStreamBubble);
+  
+  // 自动滚动到底部
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// (NEW) 处理流式响应结束
+function handleStreamEnd() {
+  if (currentStreamBubble) {
+    // 最后一次渲染，确保格式正确
+    currentStreamBubble.innerHTML = marked.parse(currentStreamText);
+    addCopyButtonsToCodeBlocks(currentStreamBubble);
+    currentStreamBubble = null;
+    currentStreamText = '';
+  }
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// (NEW) 处理流式响应错误
+function handleStreamError(error) {
+  if (currentStreamBubble) {
+    currentStreamBubble.innerText = `API 调用失败: ${error}`;
+    currentStreamBubble.classList.add('error');
+    currentStreamBubble = null;
+    currentStreamText = '';
+  } else {
+    addMessageToChat('bot', `API 调用失败: ${error}`, 'error');
   }
 }
 
@@ -200,6 +264,7 @@ function addMessageToChat(role, text, type = null) {
   
   if (role === 'bot') { 
       bubble.innerHTML = marked.parse(text);
+      addCopyButtonsToCodeBlocks(bubble);
   } else {
       bubble.innerText = text;
   }
@@ -209,17 +274,54 @@ function addMessageToChat(role, text, type = null) {
   return bubble;
 }
 
-// (MODIFIED) 设置引用文本的函数
+// (NEW) 为代码块添加复制按钮
+function addCopyButtonsToCodeBlocks(container) {
+  const codeBlocks = container.querySelectorAll('pre');
+  
+  codeBlocks.forEach((pre) => {
+    // 避免重复添加
+    if (pre.querySelector('.copy-button')) return;
+    
+    const copyButton = document.createElement('button');
+    copyButton.className = 'copy-button';
+    copyButton.innerHTML = '📋 复制';
+    copyButton.title = '复制代码';
+    
+    copyButton.addEventListener('click', () => {
+      const code = pre.querySelector('code');
+      const text = code ? code.innerText : pre.innerText;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        copyButton.innerHTML = '✅ 已复制';
+        setTimeout(() => {
+          copyButton.innerHTML = '📋 复制';
+        }, 2000);
+      }).catch(err => {
+        console.error('复制失败:', err);
+        copyButton.innerHTML = '❌ 失败';
+        setTimeout(() => {
+          copyButton.innerHTML = '📋 复制';
+        }, 2000);
+      });
+    });
+    
+    // 将按钮添加到 pre 元素
+    pre.style.position = 'relative';
+    pre.appendChild(copyButton);
+  });
+}
+
+// 设置引用文本的函数
 function setQuotedText(text) {
   currentQuotedText = text;
-  quotedSectionContent.innerText = text; // (MODIFIED) 填充到新的 content 区域
+  quotedSectionContent.innerText = text;
   quotedSection.style.display = 'block'; 
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// (MODIFIED) 清除引用文本的函数
+// 清除引用文本的函数
 function clearQuotedText() {
   currentQuotedText = '';
-  quotedSectionContent.innerText = ''; // (MODIFIED) 清空 content 区域
+  quotedSectionContent.innerText = '';
   quotedSection.style.display = 'none'; 
 }

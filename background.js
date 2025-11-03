@@ -8,7 +8,6 @@ chrome.runtime.onInstalled.addListener(() => {
   });
   
   // (B) (NEW) 将插件图标点击事件与打开侧边栏自动绑定
-  // 这是“图标点击”的标准做法，它会替换掉旧的 action.onClicked 监听器
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => console.error('Failed to set side panel behavior:', error));
 });
@@ -32,13 +31,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-
-// 3. (REMOVED) 现有的图标点击监听器
-// chrome.action.onClicked.addListener(...) 
-// 这一整块被删除了，因为上面的 setPanelBehavior 已经替代了它的功能。
-
-
-// 4. 现有的 API 调用监听器 (不变)
+// 4. (MODIFIED) 支持流式和普通 API 调用
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'callGemini') {
     callGeminiAPI(message.prompt, message.apiKey, message.model)
@@ -46,11 +39,103 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(error => sendResponse(`API 调用失败: ${error.message}`));
     return true; 
   }
+  
+  // (NEW) 流式 API 调用
+  if (message.type === 'callGeminiStream') {
+    callGeminiStreamAPI(message.prompt, message.apiKey, message.model, sender.tab.id);
+    return true;
+  }
 });
 
-// 5. 现有的 callGeminiAPI 函数 (不变)
+// 5. (NEW) 流式 API 调用函数
+async function callGeminiStreamAPI(prompt, apiKey, model, tabId) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt
+          }
+        ]
+      }
+    ]
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      chrome.runtime.sendMessage({
+        type: 'STREAM_ERROR',
+        error: `HTTP 错误! 状态: ${response.status}`
+      });
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    // 发送开始信号
+    chrome.runtime.sendMessage({
+      type: 'STREAM_START'
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        // 发送完成信号
+        chrome.runtime.sendMessage({
+          type: 'STREAM_END'
+        });
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 保留不完整的行
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonStr = line.slice(6); // 移除 "data: "
+            const data = JSON.parse(jsonStr);
+            
+            if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+              const text = data.candidates[0].content.parts[0].text;
+              
+              // 发送文本片段
+              chrome.runtime.sendMessage({
+                type: 'STREAM_CHUNK',
+                text: text
+              });
+            }
+          } catch (e) {
+            console.error('解析 SSE 数据失败:', e);
+          }
+        }
+      }
+    }
+
+  } catch (error) {
+    chrome.runtime.sendMessage({
+      type: 'STREAM_ERROR',
+      error: error.message
+    });
+  }
+}
+
+// 6. 现有的普通 API 调用函数 (保留作为备用)
 async function callGeminiAPI(prompt, apiKey, model) {
-  
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const requestBody = {
