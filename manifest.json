@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "我的 Gemini 侧边栏",
+  "version": "0.1",
+  "description": "一个使用 chrome.sidePanel API 的 Gemini 助手。",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "https://*.googleapis.com/"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": "icon.png",
+    "default_title": "打开 Gemini 侧边栏"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

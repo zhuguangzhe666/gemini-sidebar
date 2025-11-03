@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Gemini 侧边栏</title>
+  
+  <script src="marked.umd.min.js"></script> 
+
+  <style>
+    /* 1. 赛博朋克风格 (暗黑主题 - 默认) */
+    :root {
+      --bg-color: #0a0a1a;
+      --panel-color: #1a1a2e;
+      --primary-color: #00ffff; /* 霓虹青色 */
+      --secondary-color: #ff00ff; /* 霓虹品红 */
+      --text-color: #e0e0e0;
+      --bubble-bot-bg: #1a1a2e;
+      --bubble-user-bg: #00ffff;
+      --bubble-user-text: #000;
+      --shadow-primary: 0 0 10px rgba(0,255,255,0.7);
+      --shadow-secondary: 0 0 10px rgba(255,0,255,0.7);
+      --border-primary: 1px solid var(--primary-color);
+      --border-secondary: 1px solid var(--secondary-color);
+    }
+
+    /* 2. 亮色主题 */
+    body.light-theme {
+      --bg-color: #f4f4f9;
+      --panel-color: #ffffff;
+      --primary-color: #007bff;
+      --secondary-color: #e83e8c;
+      --text-color: #333333;
+      --bubble-bot-bg: #eeeeee;
+      --bubble-user-bg: #007bff;
+      --bubble-user-text: #ffffff;
+      --shadow-primary: 0 2px 5px rgba(0,0,0,0.1);
+      --shadow-secondary: 0 2px 5px rgba(0,0,0,0.1);
+      --border-primary: 1px solid #ddd;
+      --border-secondary: 1px solid #ddd;
+    }
+    
+    /* 谷歌字体 */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Roboto Mono', 'Consolas', monospace;
+      font-size: 14px;
+      overflow: hidden;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    /* 3. Flex 布局 */
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* 4. 头部 */
+    #header {
+      padding: 10px 15px;
+      background-color: var(--panel-color);
+      border-bottom: var(--border-primary);
+      box-shadow: var(--shadow-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+      transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+    }
+    #header h3 {
+      margin: 0;
+      color: var(--primary-color);
+      text-shadow: 0 0 5px var(--primary-color);
+      transition: color 0.3s, text-shadow 0.3s;
+    }
+    body.light-theme #header h3 {
+      text-shadow: none;
+    }
+    
+    #header-icons {
+      display: flex;
+      align-items: center;
+    }
+    #theme-toggle, #settings-toggle {
+      font-size: 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #theme-toggle { margin-right: 15px; }
+    #theme-toggle:hover, #settings-toggle:hover {
+      opacity: 0.7;
+    }
+
+    /* 5. API 密钥设置 */
+    #api-key-section {
+      display: none;
+      padding: 15px;
+      background: #000;
+      border-bottom: var(--border-secondary);
+    }
+    body.light-theme #api-key-section {
+      background: var(--panel-color);
+    }
+
+    #api-key-section label, #save-status {
+      font-size: 0.9em;
+      display: block;
+      margin-bottom: 5px;
+      margin-top: 10px;
+    }
+    input[type="password"], select#model-select {
+      width: calc(100% - 10px);
+      padding: 5px;
+      background: var(--panel-color);
+      border: var(--border-secondary);
+      color: var(--text-color);
+      font-family: 'Roboto Mono', monospace;
+    }
+    #save-key {
+      margin-top: 15px;
+    }
+    body.light-theme input[type="password"], 
+    body.light-theme select#model-select {
+      background: #f4f4f9;
+      border: 1px solid #ddd;
+      color: #333;
+    }
+    
+    /* 6. 聊天记录区域 (不变) */
+    #chat-container {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .chat-bubble {
+      padding: 10px 15px;
+      border-radius: 10px;
+      max-width: 85%;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+      border: 1px solid transparent;
+      transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+    }
+    .user-message {
+      background-color: var(--bubble-user-bg);
+      color: var(--bubble-user-text);
+      align-self: flex-end;
+      border-bottom-right-radius: 0;
+    }
+    .bot-message {
+      background-color: var(--bubble-bot-bg);
+      color: var(--text-color);
+      align-self: flex-start;
+      border: var(--border-secondary);
+      border-bottom-left-radius: 0;
+    }
+    .bot-message.error {
+      color: #ff4d4d;
+      border-color: #ff4d4d;
+    }
+
+    /* 7. 底部输入区域 (粘性) */
+    #input-footer {
+      flex-shrink: 0;
+      padding: 10px 15px;
+      background-color: var(--panel-color);
+      border-top: var(--border-primary);
+      transition: background-color 0.3s, border-color 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    /* (MODIFIED) 划词引用容器 */
+    #quoted-section {
+      display: none; /* 默认隐藏 */
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background-color: rgba(0, 255, 255, 0.1);
+      border: 1px solid var(--primary-color);
+      border-radius: 5px;
+      font-size: 0.9em;
+      color: var(--text-color);
+      position: relative; /* (NEW) 用于定位清除按钮 */
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      max-height: 80px;
+      overflow-y: auto;
+      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+    }
+    body.light-theme #quoted-section {
+      background-color: rgba(0, 123, 255, 0.1);
+      border: 1px solid #cce5ff;
+    }
+
+    /* (NEW) 引用内容，为清除按钮留空间 */
+    #quoted-section-content {
+      padding-right: 25px; 
+    }
+
+    /* (NEW) 清除引用按钮样式 */
+    #clear-quote {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: none;
+      border: none;
+      color: var(--primary-color);
+      cursor: pointer;
+      font-size: 1.2em;
+      line-height: 1;
+      padding: 0;
+      margin: 0;
+      transition: color 0.3s;
+    }
+    #clear-quote:hover {
+      color: #ff4d4d; /* 悬停时变红 */
+    }
+    
+    #prompt-input {
+      width: calc(100% - 20px);
+      min-height: 40px;
+      max-height: 150px;
+      padding: 10px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      border: var(--border-primary);
+      border-radius: 5px;
+      resize: vertical;
+      font-family: 'Roboto Mono', monospace;
+      transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+    }
+    #prompt-input:focus {
+      outline: none;
+      box-shadow: var(--shadow-primary);
+      border: var(--border-primary);
+    }
+    
+    /* 8. 按钮通用样式 (不变) */
+    button {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid var(--secondary-color);
+      color: var(--secondary-color);
+      font-family: 'Roboto Mono', monospace;
+      font-size: 1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-shadow: 0 0 5px var(--secondary-color);
+    }
+    body.light-theme button {
+      text-shadow: none;
+    }
+    button:hover {
+      background: var(--secondary-color);
+      color: var(--bg-color);
+      box-shadow: var(--shadow-secondary);
+    }
+    button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* 9. Markdown 渲染样式 (不变) */
+    .bot-message h1, .bot-message h2, .bot-message h3, .bot-message h4 {
+      color: var(--primary-color);
+      text-shadow: 0 0 3px var(--primary-color);
+      margin-top: 1em;
+      margin-bottom: 0.5em;
+      border-bottom: 1px solid var(--primary-color);
+      padding-bottom: 5px;
+      transition: color 0.3s, text-shadow 0.3s, border-color 0.3s;
+    }
+    body.light-theme .bot-message h1,
+    body.light-theme .bot-message h2,
+    body.light-theme .bot-message h3,
+    body.light-theme .bot-message h4 {
+      text-shadow: none;
+    }
+    
+    .bot-message h1 { font-size: 1.5em; }
+    .bot-message h2 { font-size: 1.3em; }
+    .bot-message h3 { font-size: 1.1em; }
+    .bot-message p { margin-bottom: 0.5em; line-height: 1.5; }
+    .bot-message strong { color: var(--primary-color); transition: color 0.3s; }
+    .bot-message em { color: var(--secondary-color); transition: color 0.3s; }
+    .bot-message code {
+      background: rgba(0, 255, 255, 0.1);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 0.9em;
+      color: var(--primary-color);
+      transition: background-color 0.3s, color 0.3s;
+    }
+    body.light-theme .bot-message code {
+      background: rgba(0, 123, 255, 0.1);
+      color: var(--primary-color);
+    }
+    .bot-message pre {
+      background: #000;
+      padding: 10px;
+      border-radius: 5px;
+      border: var(--border-primary);
+      overflow-x: auto;
+      margin-top: 1em;
+      margin-bottom: 1em;
+      transition: background-color 0.3s, border-color 0.3s;
+    }
+    body.light-theme .bot-message pre {
+      background: #fdfdfd;
+      border: 1px solid #eee;
+    }
+    .bot-message pre code {
+      background: none;
+      color: var(--text-color);
+      padding: 0;
+      border-radius: 0;
+    }
+    body.light-theme .bot-message pre code {
+      color: #333;
+    }
+    .bot-message ul, .bot-message ol {
+      margin-left: 20px;
+      margin-bottom: 0.5em;
+    }
+    .bot-message li { margin-bottom: 0.3em; }
+    .bot-message hr {
+      border: none;
+      border-top: 1px dotted var(--secondary-color);
+      margin: 20px 0;
+      transition: border-color 0.3s;
+    }
+
+  </style>
+</head>
+<body>
+  
+  <div id="app-container">
+    
+    <div id="header">
+      <h3>我的 Gemini 助手</h3>
+      <div id="header-icons">
+        <div id="theme-toggle" title="切换主题">🌙</div> <div id="settings-toggle" title="设置 API 密钥">⚙️</div>
+      </div>
+    </div>
+    
+    <div id="api-key-section">
+      <label for="api-key">API 密钥:</label>
+      <input type="password" id="api-key" placeholder="在此输入你的 Gemini API 密钥">
+      
+      <label for="model-select">AI 模型:</label>
+      <select id="model-select">
+        <option value="gemini-2.5-pro">Pro - 高质量</option>
+        <option value="gemini-2.5-flash-preview-09-2025">Flash-pre - 平衡</option>
+        <option value="gemini-2.5-flash-lite-preview-09-2025">Flash-lite-pre - 最快</option>
+      </select>
+      
+      <button id="save-key">保存密钥</button>
+      <div id="save-status"></div>
+    </div>
+    
+    <div id="chat-container">
+      </div>
+    
+    <div id="input-footer">
+      <div id="quoted-section">
+        <div id="quoted-section-content"></div> <button id="clear-quote" title="清除引用">✖️</button> </div>
+      <textarea id="prompt-input" placeholder="输入消息... (Shift+Enter 换行)"></textarea>
+    </div>
+    
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
