@@ -12,14 +12,23 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((error) => console.error('Failed to set side panel behavior:', error));
 });
 
-// 2. 监听右键菜单的点击事件 (不变)
+// 2. 监听右键菜单的点击事件 (添加错误处理)
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "ask-gemini-selection") {
     const selectedText = info.selectionText;
+    
+    // (FIXED) 添加安全检查，防止 tab 或 tab.id 为 undefined
+    if (!tab || !tab.id) {
+      console.error('无法获取 tab 信息，可能在不支持的页面（如 chrome:// 页面）');
+      return;
+    }
+    
     const tabId = tab.id;
 
     // (1) 打开侧边栏
-    chrome.sidePanel.open({ tabId: tabId });
+    chrome.sidePanel.open({ tabId: tabId }).catch((error) => {
+      console.error('打开侧边栏失败:', error);
+    });
 
     // (2) 向侧边栏发送消息
     setTimeout(() => {
@@ -40,15 +49,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; 
   }
   
-  // (NEW) 流式 API 调用
+  // (NEW) 流式 API 调用 - 修复 sender.tab 可能为 undefined 的问题
   if (message.type === 'callGeminiStream') {
-    callGeminiStreamAPI(message.prompt, message.apiKey, message.model, sender.tab.id);
+    // 修复：sender.tab 可能为 undefined（从 sidepanel 发送时）
+    // 实际上 tabId 在这个函数中并未使用，可以传 null
+    callGeminiStreamAPI(message.prompt, message.apiKey, message.model, null);
     return true;
   }
 });
 
-// 5. (NEW) 流式 API 调用函数
-async function callGeminiStreamAPI(prompt, apiKey, model, tabId) {
+// 5. (NEW) 流式 API 调用函数 - 修复：移除未使用的 tabId 参数
+async function callGeminiStreamAPI(prompt, apiKey, model) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`;
 
   const requestBody = {

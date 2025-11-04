@@ -110,6 +110,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 注册划词消息监听器
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log('[Sidepanel] 收到消息:', message.type);
+    
     if (message.type === 'SEND_SELECTION_TO_SIDEBAR') {
       setQuotedText(message.text);
       promptInput.value = '';
@@ -119,18 +121,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // (NEW) 处理流式响应消息
     if (message.type === 'STREAM_START') {
+      console.log('[Sidepanel] 开始接收流式响应');
       handleStreamStart();
     }
     
     if (message.type === 'STREAM_CHUNK') {
+      console.log('[Sidepanel] 收到数据块, 长度:', message.text?.length);
       handleStreamChunk(message.text);
     }
     
     if (message.type === 'STREAM_END') {
+      console.log('[Sidepanel] 流式响应结束');
       handleStreamEnd();
     }
     
     if (message.type === 'STREAM_ERROR') {
+      console.error('[Sidepanel] 流式响应错误:', message.error);
       handleStreamError(message.error);
     }
   });
@@ -186,16 +192,29 @@ async function handleSend() {
   }
 
   promptInput.value = ''; 
+  
+  // 发送后清除引用
+  clearQuotedText();
 
   // --- C. 调用流式 API ---
   try {
+    console.log('[Sidepanel] 发送流式请求, 模型:', selectedModel);
     chrome.runtime.sendMessage({
       type: 'callGeminiStream',
       prompt: fullPrompt, 
       apiKey: apiKey,
       model: selectedModel 
+    }, (response) => {
+      // 检查是否有错误
+      if (chrome.runtime.lastError) {
+        console.error('[Sidepanel] 发送消息错误:', chrome.runtime.lastError);
+        addMessageToChat('bot', `发送请求失败: ${chrome.runtime.lastError.message}`, 'error');
+      } else {
+        console.log('[Sidepanel] 消息已发送到 background');
+      }
     });
   } catch (error) {
+    console.error('[Sidepanel] 发送异常:', error);
     addMessageToChat('bot', `发生错误: ${error.message}`, 'error');
   }
 }

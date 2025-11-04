@@ -353,3 +353,152 @@ function addCopyButtonsToCodeBlocks(container) {
 - 💪 更强（代码复制）
 
 快去试试吧！✨
+
+
+# 🔧 紧急修复：Tab ID 错误
+
+## 🐛 问题描述
+
+**错误信息：**
+```
+Error in event handler: TypeError: Cannot read properties of undefined (reading 'id') 
+at chrome-extension://xxx/background.js:45:83
+```
+
+## 🎯 根本原因
+
+在某些特殊页面中使用右键菜单时，`tab` 对象可能为 `undefined`：
+
+- ❌ Chrome 内置页面（`chrome://extensions/`、`chrome://settings/` 等）
+- ❌ 扩展程序页面（`chrome-extension://`）
+- ❌ Chrome Web Store 页面
+- ❌ PDF 内嵌查看器
+- ❌ 开发者工具页面
+
+Chrome 不允许扩展程序在这些页面上执行某些操作。
+
+---
+
+## ✅ 修复内容
+
+在 `background.js` 中添加了安全检查：
+
+```javascript
+// 修复前（会崩溃）
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const tabId = tab.id;  // ❌ tab 可能是 undefined
+  chrome.sidePanel.open({ tabId: tabId });
+});
+
+// 修复后（安全）
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  // ✅ 添加安全检查
+  if (!tab || !tab.id) {
+    console.error('无法获取 tab 信息，可能在不支持的页面');
+    return;
+  }
+  
+  const tabId = tab.id;
+  chrome.sidePanel.open({ tabId: tabId }).catch((error) => {
+    console.error('打开侧边栏失败:', error);
+  });
+});
+```
+
+---
+
+## 📦 如何应用修复
+
+### 方法 1：只替换 background.js（推荐）
+
+```bash
+# 1. 下载修复后的 background.js
+
+# 2. 替换插件目录中的文件
+cp ~/Downloads/background.js /path/to/your/plugin/
+
+# 3. 刷新插件
+# 打开 chrome://extensions/
+# 找到你的插件，点击刷新按钮 🔄
+```
+
+### 方法 2：Git 提交修复
+
+```bash
+# 如果你还没推送之前的优化
+git add background.js
+git commit -m "🐛 fix: 修复特殊页面中右键菜单的 tab.id 错误"
+git push origin feature/phase1-opt
+
+# 如果已经推送，追加一个修复提交
+git add background.js
+git commit -m "🐛 fix: 添加 tab 对象安全检查，防止特殊页面崩溃"
+git push origin feature/phase1-opt
+```
+
+---
+
+## 🧪 测试验证
+
+修复后，在以下页面测试右键菜单应该**不会报错**：
+
+1. ✅ 正常网页（如 Google、GitHub）→ **功能正常**
+2. ✅ Chrome 设置页（`chrome://extensions/`）→ **静默失败，不报错**
+3. ✅ 扩展程序页面 → **静默失败，不报错**
+4. ✅ PDF 查看器 → **静默失败，不报错**
+
+**预期行为：**
+- 在支持的页面：功能正常工作
+- 在不支持的页面：不会弹错误，控制台有日志
+
+---
+
+## 📊 修复对比
+
+| 场景 | 修复前 | 修复后 |
+|-----|--------|--------|
+| **正常网页** | ✅ 正常 | ✅ 正常 |
+| **Chrome 内置页面** | ❌ 报错崩溃 | ✅ 静默失败 |
+| **扩展页面** | ❌ 报错崩溃 | ✅ 静默失败 |
+| **错误提示** | 弹出错误提示 | 控制台日志 |
+
+---
+
+## 🔍 其他改进
+
+同时也为 `sidePanel.open()` 添加了错误捕获：
+
+```javascript
+chrome.sidePanel.open({ tabId: tabId }).catch((error) => {
+  console.error('打开侧边栏失败:', error);
+});
+```
+
+这样即使侧边栏打开失败，也不会导致插件崩溃。
+
+---
+
+## 💡 使用建议
+
+1. **正常使用场景**：在普通网页（Google、GitHub、新闻网站等）使用划词功能，一切正常
+
+2. **特殊页面提示**：
+   - 如果在 `chrome://` 开头的页面使用右键菜单，不会有反应
+   - 这是 Chrome 的安全限制，不是 bug
+   - 可以打开 F12 控制台查看提示信息
+
+3. **推荐做法**：
+   - 在需要使用 AI 助手的网页打开插件
+   - 避免在 Chrome 设置页等内置页面使用
+
+---
+
+## 🎊 修复完成！
+
+现在您的插件在任何页面都不会报错了！
+
+- ✅ 核心功能不受影响
+- ✅ 错误处理更健壮
+- ✅ 用户体验更流畅
+
+如有其他问题，随时告诉我！🚀
